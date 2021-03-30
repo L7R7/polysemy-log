@@ -7,10 +7,11 @@ import qualified Polysemy.Log.Data.DataLog as DataLog
 import Polysemy.Log.Data.DataLog (DataLog)
 import Polysemy.Log.Data.LogMessage (LogMessage(LogMessage))
 import Polysemy.Log.Data.Severity (Severity(Debug))
+import qualified Data.Map as Map
 
 data Context =
   Context {
-    context :: [Text],
+    context :: Map.Map Text Text,
     message :: LogMessage
   }
   deriving (Eq, Show)
@@ -21,36 +22,36 @@ log ::
   Text ->
   Sem r ()
 log severity msg =
-  DataLog.dataLog (Context [] (LogMessage severity msg))
+  DataLog.dataLog (Context Map.empty (LogMessage severity msg))
 
 pushContext ::
   Member (DataLog Context) r =>
-  [Text] ->
+  (Text, Text) ->
   Sem r a ->
   Sem r a
-pushContext ctx =
+pushContext (k,v) =
   DataLog.local push
   where
     push (Context c m) =
-      Context (ctx <> c) m
+      Context ((Map.singleton k v) <> c) m
 
 prog ::
   Members [DataLog Context, AtomicState [Context]] r =>
   Sem r [Context]
 prog = do
   log Debug "0"
-  pushContext ["level2", "level1"] do
+  pushContext ("key1", "foo") do
     log Debug "2"
-    pushContext ["level3"] do
+    pushContext ("key2", "bar") do
       log Debug "3"
   atomicGet
 
 target :: [Context]
 target =
   [
-    Context ["level3", "level2", "level1"] (LogMessage Debug "3"),
-    Context ["level2", "level1"] (LogMessage Debug "2"),
-    Context [] (LogMessage Debug "0")
+    Context (Map.fromList [("key1", "foo"), ("key2", "bar")]) (LogMessage Debug "3"),
+    Context (Map.singleton "key1" "foo") (LogMessage Debug "2"),
+    Context Map.empty (LogMessage Debug "0")
   ]
 
 test_local :: UnitTest
